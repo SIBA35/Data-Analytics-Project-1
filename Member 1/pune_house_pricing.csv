@@ -1,0 +1,79 @@
+DROP TABLE IF EXISTS raw_house_data;
+CREATE TABLE raw_house_data (
+    property_id VARCHAR(20),
+    location VARCHAR(100),
+    property_type VARCHAR(50),
+    area_sqft INT,
+    bedrooms INT,
+    bathrooms INT,
+    floor_number INT,
+    age_years INT,
+    furnishing VARCHAR(50),
+    parking VARCHAR(20),
+    distance_km FLOAT,
+    price_inr INT
+);
+
+SELECT * FROM raw_house_data;
+SELECT COUNT (*) FROM raw_house_data;
+
+SELECT COUNT(*) FILTER (WHERE property_id IS NULL) AS missing_ids
+FROM raw_house_data;
+
+SELECT COUNT(*) FILTER (WHERE location IS NULL) AS missing_ids
+FROM raw_house_data;
+
+SELECT COUNT(*) FILTER (WHERE property_type IS NULL) AS missing_ids
+FROM raw_house_data;
+
+SELECT COUNT(*) FILTER (WHERE price_inr IS NULL) AS missing_ids
+FROM raw_house_data;
+
+SELECT property_id, COUNT(*)
+FROM raw_house_data
+GROUP BY property_id
+HAVING COUNT(*) > 1;
+
+SELECT *
+FROM raw_house_data
+WHERE
+    area_sqft::TEXT !~ '^[0-9,]+$'
+    OR bedrooms::TEXT !~ '^[0-9]+$'
+    OR bathrooms::TEXT !~ '^[0-9]+$'
+    OR age_years::TEXT !~ '^[0-9]+$'
+    OR distance_km::TEXT !~ '^[0-9]+(\.[0-9]+)?$'
+    OR price_inr::TEXT !~ '^[0-9,]+$';
+
+SELECT DISTINCT property_type
+FROM raw_house_data;
+
+SELECT DISTINCT furnishing
+FROM raw_house_data;
+
+SELECT DISTINCT parking
+FROM raw_house_data;
+
+SELECT DISTINCT location
+FROM raw_house_data;
+
+DROP TABLE IF EXISTS clean_house_data;
+
+CREATE TABLE clean_house_data AS
+SELECT DISTINCT ON (TRIM(property_id))
+    TRIM(property_id)                                        AS property_id,
+    INITCAP(TRIM(location))                                  AS location,
+    INITCAP(TRIM(property_type))                             AS property_type,
+    ROUND(REPLACE(TRIM(area_sqft::TEXT), ',', '')::NUMERIC)::INTEGER AS area_sqft,
+    TRIM(bedrooms::TEXT)::INTEGER                            AS bedrooms,
+    TRIM(bathrooms::TEXT)::INTEGER                           AS bathrooms,
+    TRIM(floor_number::TEXT)::INTEGER                        AS floor_number,
+    TRIM(age_years::TEXT)::INTEGER                           AS age_years,
+    INITCAP(TRIM(furnishing))                                AS furnishing,
+    INITCAP(TRIM(parking))                                   AS parking,
+    TRIM(distance_km::TEXT)::NUMERIC(6,2)                    AS distance_km,
+    ROUND(REPLACE(TRIM(price_inr::TEXT), ',', '')::NUMERIC)::BIGINT AS price_inr
+FROM raw_house_data
+ORDER BY TRIM(property_id);
+
+SELECT COUNT(*) 
+FROM clean_house_data;
