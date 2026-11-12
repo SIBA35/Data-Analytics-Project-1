@@ -1,0 +1,30 @@
+
+digraph {
+    location -> property_type;
+    location -> dist_city;
+    location -> price;
+    location -> parking_treatment;
+
+    property_type -> area_sqft;
+    property_type -> floor_number;
+    property_type -> parking_treatment;
+    property_type -> price;
+
+    area_sqft -> bedrooms;
+    area_sqft -> bathrooms;
+    area_sqft -> parking_treatment;
+    area_sqft -> price;
+
+    bedrooms -> price;
+    bathrooms -> price;
+
+    floor_number -> price;
+    age -> furnishing_level;
+    age -> parking_treatment;
+    age -> price;
+    dist_city -> parking_treatment;
+    dist_city -> price;
+    furnishing_level -> price;
+
+    parking_treatment -> price;
+}
