@@ -35,7 +35,7 @@ def finish_plot(name):
     plt.close()
 
 # ==========================================
-# DATA INGESTION AND CLEANING
+# TASK 1: DATA INGESTION AND CLEANING
 # ==========================================
 df = pd.read_csv(DATA_PATH)
 
@@ -115,7 +115,8 @@ finish_plot("avg_ppsf_by_region.png")
 df.to_csv(out("cleaned_dataset.csv"), index=False)
 
 # ==========================================
-# CAUSAL DAG USING DOWHY
+# TASK 2: CAUSAL DAG USING DOWHY
+# Question: what is the causal effect of PARKING on PRICE?
 # ==========================================
 df["parking_treatment"] = df["parking"].map({"Yes": 1, "No": 0})
 # Furnishing as an ordered numeric level (DoWhy needs numeric effect modifiers)
@@ -172,20 +173,39 @@ for layer, nodes in enumerate(nx.topological_generations(G)):
     for n in nodes:
         G.nodes[n]["layer"] = layer
 pos = nx.multipartite_layout(G, subset_key="layer", align="vertical")
+
+# Friendly display names (only used for the picture; DoWhy keeps the real names)
+display_names = {
+    "dist_city":         "Distance\nfrom City",
+    "area_sqft":         "Area\n(sqft)",
+    "floor_number":      "Floor\nNumber",
+    "furnishing_level":  "Furnishing\nLevel",
+    "property_type":     "Property\nType",
+    "parking_treatment": "Parking\n(Treatment)",
+    "price":             "Price",
+    "age":               "Age of\nProperty",
+    "location":          "Location",
+    "bedrooms":          "Bedrooms",
+    "bathrooms":         "Bathrooms",
+}
+labels = {n: display_names.get(n, n) for n in G.nodes}
+
 node_colors = ["tomato" if n == "parking_treatment" else
                "gold" if n == "price" else "lightblue" for n in G.nodes]
 
 plt.figure(figsize=(14, 8))
-nx.draw_networkx(G, pos, node_color=node_colors, node_size=2600, font_size=8,
+nx.draw_networkx(G, pos, labels=labels, node_color=node_colors,
+                 node_size=4500, font_size=10,
                  arrows=True, arrowsize=14, edge_color="gray",
                  connectionstyle="arc3,rad=0.08")
-plt.title("Causal DAG (red = treatment, yellow = outcome)")
+plt.title("Causal Dag : Effect Of Parking Availability On Pune Residential Property Prices",
+          fontsize=21, pad=20)
 plt.axis("off")
 plt.savefig(out("causal_dag.png"), dpi=130, bbox_inches="tight")
 if not SAVE_ONLY:
     plt.show()
 plt.close()
-print("\nDAG image saved:", out("causal_dag.png"))
+print("\nDAG image saved:", os.path.abspath(out("causal_dag.png")))
 
 # Create DoWhy model
 model = CausalModel(
@@ -226,7 +246,7 @@ for refuter in ["random_common_cause", "placebo_treatment_refuter"]:
         print(f"\nRefutation {refuter} skipped:", e)
 
 # ==========================================
-# PRE-TREATMENT AND TREATMENT PERIOD
+# TASK 3: PRE-TREATMENT AND TREATMENT PERIOD
 # ==========================================
 # NOTE: this dataset has NO transaction dates, so this is only a
 # DEMONSTRATION split by row order, not a real before/after separation.
