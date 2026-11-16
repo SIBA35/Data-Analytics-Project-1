@@ -8,11 +8,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy import stats 
+from scipy import stats
 
 sns.set_theme(style="whitegrid", palette="deep")
 
-DEFAULT_PATH = "DOC-20261110-WA0011.xlsx"   # relative path: file sits next to the notebook
+DEFAULT_PATH = "DOC-20261110-WA0011_with_synthetic_datetime.xlsx"   # relative path: file sits next to the notebook
 RENAME = {
     "Area (sqft)": "Area",
     "Age (Years)": "Age",
@@ -20,6 +20,8 @@ RENAME = {
     "Price (INR)": "Price",
     "Floor Number": "Floor",
     "Property Type": "Type",
+    "Observation Date": "Date",
+    "Observation Time": "Time",
 }
 NUM_COLS = ["Area", "Bedrooms", "Bathrooms", "Floor", "Age", "Distance", "Price"]
 CAT_COLS = ["Location", "Type", "Furnishing", "Parking"]
@@ -40,7 +42,11 @@ def load_data(path=DEFAULT_PATH):
         )
     df = pd.read_excel(path)
     df.columns = clean_columns(df.columns)
-    return df.rename(columns=RENAME)
+    df = df.rename(columns=RENAME)
+    if {"Date", "Time"} <= set(df.columns):                      # combine into one timestamp
+        df["Date"] = pd.to_datetime(df["Date"])
+        df["Timestamp"] = pd.to_datetime(df["Date"].dt.strftime("%Y-%m-%d") + " " + df["Time"].astype(str))
+    return df
 
 
 def add_features(df):
@@ -55,6 +61,12 @@ def add_features(df):
     df["Age_Bucket"] = pd.cut(df["Age"], [-1, 5, 10, 20, 30], labels=["0-5", "6-10", "11-20", "21-30"])
     df["Area_Bucket"] = pd.cut(df["Area"], [0, 1000, 1500, 2000, 3000],
                                labels=["<1000", "1000-1500", "1500-2000", "2000+"])
+    if "Timestamp" in df.columns:
+        ts = df["Timestamp"]
+        df["Month"] = ts.dt.month; df["Quarter"] = ts.dt.quarter; df["Week"] = ts.dt.isocalendar().week.astype(int)
+        df["DayOfWeek"] = ts.dt.dayofweek; df["DayName"] = ts.dt.day_name(); df["Hour"] = ts.dt.hour
+        df["Days_Since_Start"] = (df["Date"] - df["Date"].min()).dt.days
+        df["Half"] = np.where(df["Month"] <= 6, "H1 (Jan-Jun)", "H2 (Jul-Dec)")
     return df
 
 
@@ -68,6 +80,8 @@ def quality_report(df):
         "more_baths_than_beds": int((df["Bathrooms"] > df["Bedrooms"]).sum()),
         "houses": int((df["Type"] == "Independent House").sum()),
         "houses_above_ground_floor": int(((df["Type"] == "Independent House") & (df["Floor"] > 0)).sum()),
+        **({"date_min": str(df["Date"].min().date()), "date_max": str(df["Date"].max().date()),
+            "distinct_dates": int(df["Date"].nunique())} if "Date" in df.columns else {}),
     }
 
 
@@ -217,3 +231,61 @@ def plot_outliers(df):
     sns.boxplot(x=df.Price_Cr, ax=ax[0]); ax[0].set_title("Price outliers")
     sns.boxplot(x=df.PPSF, ax=ax[1]); ax[1].set_title("Price per sqft outliers")
     fig.tight_layout(); return fig
+
+
+# ----------------------------------------------------------------- time analysis
+def time_tests(df):
+    """Does price (or price per sqft) depend on when the listing was observed?"""
+    rows = []
+    for c in ["Month", "Quarter", "DayOfWeek", "Hour"]:
+        g = [x for _, x in df.groupby(c)]
+        rows.append((c, stats.kruskal(*[x.Price.values for x in g]).pvalue, stats.kruskal(*[x.PPSF.values for x in g]).pvalue))
+    t = pd.DataFrame(rows, columns=["Time feature", "Kruskal p (Price)", "Kruskal p (PPSF)"]).set_index("Time feature")
+    r1, p1 = stats.spearmanr(df.Days_Since_Start, df.Price); r2, p2 = stats.spearmanr(df.Days_Since_Start, df.PPSF)
+    t.loc["Days_Since_Start (Spearman)"] = [p1, p2]
+    h = [df.loc[df.Half == k, "PPSF"].values for k in sorted(df.Half.unique())]
+    t.loc["H1 vs H2 (Mann-Whitney)"] = [stats.mannwhitneyu(*[df.loc[df.Half == k, "Price"].values for k in sorted(df.Half.unique())]).pvalue,
+                                        stats.mannwhitneyu(*h).pvalue]
+    return t.round(3)
+
+
+def date_uniformity(df):
+    """KS tests: are dates / times spread evenly (as if assigned at random)?"""
+    d = df["Days_Since_Start"] / df["Days_Since_Start"].max()
+    hr = (df["Timestamp"].dt.hour + df["Timestamp"].dt.minute / 60 - 9) / 10
+    return pd.Series({"Dates vs uniform (KS p)": stats.kstest(d, "uniform").pvalue,
+                      "Time of day vs uniform 09:00-19:00 (KS p)": stats.kstest(hr, "uniform").pvalue}).round(3)
+
+
+def location_month_counts(df):
+    return pd.crosstab(df["Location"], df["Month"])
+
+
+def plot_time_overview(df):
+    fig, ax = plt.subplots(2, 2, figsize=(14, 8))
+    m = df.groupby("Month").agg(n=("Price", "size"), ppsf=("PPSF", "median"))
+    ax[0, 0].bar(m.index, m.n); ax[0, 0].set_title("Listings observed per month"); ax[0, 0].set_xlabel("Month")
+    sns.boxplot(data=df, x="Month", y="PPSF", ax=ax[0, 1]); ax[0, 1].set_title("Price per sqft by month")
+    order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    sns.boxplot(data=df, x="DayName", y="PPSF", order=order, ax=ax[1, 0]); ax[1, 0].tick_params(axis="x", rotation=30)
+    ax[1, 0].set_title("Price per sqft by day of week")
+    sns.boxplot(data=df, x="Hour", y="PPSF", ax=ax[1, 1]); ax[1, 1].set_title("Price per sqft by hour of day")
+    fig.tight_layout(); return fig
+
+
+def plot_time_series(df):
+    d = df.sort_values("Timestamp")
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4.5))
+    ax[0].scatter(d.Timestamp, d.PPSF, s=10, alpha=.4)
+    roll = d.set_index("Timestamp").PPSF.rolling("30D", min_periods=10).median()
+    ax[0].plot(roll.index, roll.values, c="red", label="30-day rolling median"); ax[0].legend()
+    ax[0].set_title("Price per sqft over time"); ax[0].tick_params(axis="x", rotation=30)
+    w = d.set_index("Timestamp").resample("W").size()
+    ax[1].plot(w.index, w.values); ax[1].set_title("Listings observed per week"); ax[1].tick_params(axis="x", rotation=30)
+    fig.tight_layout(); return fig
+
+
+def plot_location_month_heatmap(df):
+    fig = plt.figure(figsize=(10, 5))
+    sns.heatmap(location_month_counts(df), annot=True, fmt="d", cmap="Blues")
+    plt.title("Number of listings per location and month"); fig.tight_layout(); return fig
