@@ -5,6 +5,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+from pathlib import Path
 
 # ==========================================================
 # 1. PAGE CONFIGURATION
@@ -200,10 +201,12 @@ hr {
 # 3. LOAD DATASET
 # ==========================================================
 
+BASE_DIR = Path(__file__).resolve().parent                      
+DATA_PATH = BASE_DIR.parent / "data" / "properties_clean.csv"   
+
 @st.cache_data
 def load_data():
-
-    data = pd.read_csv("../data/properties_clean.csv")
+    data = pd.read_csv(DATA_PATH)
 
     numeric_cols = [
         "area_sqft",
