@@ -1,18 +1,16 @@
 """
 Causal Impact Visualization
-File : app.py
-Data : causal_impact_data.csv (same folder as this file)
-
-Run from that folder in the Terminal:
-    python -m streamlit run app.py --server.port 8051
+File: app.py
+Data: causal_impact_data.csv
 """
 
 from pathlib import Path
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 # ------------------------------------------------------------------
 # Page setup
